@@ -3,27 +3,37 @@ package com.afcompany.netflixclone;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.content.Context;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.afcompany.netflixclone.model.Movie;
+import com.afcompany.netflixclone.model.MovieDetail;
+import com.afcompany.netflixclone.util.ImageDownloaderTask;
+import com.afcompany.netflixclone.util.MovieDetailTask;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class MovieActivity extends AppCompatActivity {
+public class MovieActivity extends AppCompatActivity implements MovieDetailTask.MovieDetailLoader {
 
     private TextView txtTitle;
     private TextView txtDesc;
     private TextView txtCast;
-
     private RecyclerView recyclerView;
+    private MovieAdapter movieAdapter;
+    private ImageView imgCover;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -33,6 +43,7 @@ public class MovieActivity extends AppCompatActivity {
         txtTitle = findViewById(R.id.txt_view_title);
         txtDesc = findViewById(R.id.text_view_desc);
         txtCast = findViewById(R.id.text_view_cast);
+        imgCover = findViewById(R.id.image_view_cover);
 
         recyclerView = findViewById(R.id.recycler_view_similar);
 
@@ -45,18 +56,49 @@ public class MovieActivity extends AppCompatActivity {
             getSupportActionBar().setTitle(null);
         }
 
-        txtTitle.setText("Batman Cavaleiro das Trevas");
-        txtDesc.setText("Com a ajuda de Jim Gordon e Harvey Dent, Batman tem mantido a ordem na cidade de Gotham. Mas um jovem e anárquico criminoso conhecido como Coringa ganha força e decide instaurar um verdadeiro caos na cidade.");
-        txtCast.setText(getString(R.string.cast, "Christian Bale, " + "Michael Caine, " + "Heath Ledger, " + "Gary Oldman, " + "Aaron Eckhart, " + "Maggie Gyllenhaal, " + "Morgan Freeman"));
+        LayerDrawable drawable =
+                (LayerDrawable) ContextCompat.getDrawable(this, R.drawable.shadows);
 
-        List<Movie> movies = new ArrayList<>();
-        for (int i = 0; i < 30; i++){
-            Movie movie = new Movie();
-            movies.add(movie);
+        if(drawable != null){
+            Drawable movieCover = ContextCompat.getDrawable(this, R.drawable.movie_4);
+            drawable.setDrawableByLayerId(R.id.cover_drawble, movieCover);
+//            ((ImageView) findViewById(R.id.image_view_cover)).setImageDrawable(drawable);
         }
 
-        recyclerView.setAdapter(new MovieAdapter(movies));
+        List<Movie> movies = new ArrayList<>();
+        movieAdapter = new MovieAdapter(movies);
+        recyclerView.setAdapter(movieAdapter);
         recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
+
+        Bundle extras = getIntent().getExtras();
+        if (extras != null) {
+            int id = extras.getInt("id");
+            MovieDetailTask movieDetailTask = new MovieDetailTask(this);
+            movieDetailTask.setMovieDetailLoader(this);
+            movieDetailTask.execute("https://tiagoaguiar.co/api/netflix/" + id);
+        }
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == android.R.id.home)
+            finish();
+
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onResult(MovieDetail movieDetail) {
+        txtTitle.setText(movieDetail.getMovie().getTitle());
+        txtDesc.setText(movieDetail.getMovie().getDesc());
+        txtCast.setText(movieDetail.getMovie().getCast());
+
+        ImageDownloaderTask imageDownloaderTask = new ImageDownloaderTask(imgCover);
+        imageDownloaderTask.setShadowEnable(true);
+        imageDownloaderTask.execute(movieDetail.getMovie().getCoverUrl());
+
+        movieAdapter.setMovies(movieDetail.getMoviesSimiar());
+        movieAdapter.notifyDataSetChanged();
     }
 
     private static class MovieHolder extends RecyclerView.ViewHolder {
@@ -71,10 +113,15 @@ public class MovieActivity extends AppCompatActivity {
 
     private class MovieAdapter extends RecyclerView.Adapter<MovieHolder> {
 
-        private final List<Movie> movies;
+        private List<Movie> movies;
 
         public MovieAdapter(List<Movie> movies) {
             this.movies = movies;
+        }
+
+        public void setMovies(List<Movie> movies) {
+            this.movies.clear();
+            this.movies.addAll(movies);
         }
 
         @NonNull
@@ -86,7 +133,7 @@ public class MovieActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull MovieHolder holder, int position) {
             Movie movie = movies.get(position);
-//            holder.imageViewCover.setImageResource(movie.getCoverUrl());
+            new ImageDownloaderTask(holder.imageViewCover).execute(movie.getCoverUrl());
         }
 
         @Override
